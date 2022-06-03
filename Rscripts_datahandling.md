@@ -4,3 +4,4 @@
 ```
 > data()
 ```
+(snippet showing a few examples of dummy datasets in R)[datasets.png]
