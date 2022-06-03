@@ -4,4 +4,4 @@
 ```
 > data()
 ```
-[snippet showing a few examples of dummy datasets in R] (https://raw.githubusercontent.com/akanksharawat07/Bioinfo_Rscripts/main/datasets.png)
+![dataset1_img](https://raw.githubusercontent.com/akanksharawat07/Bioinfo_Rscripts/main/datasets.png)
