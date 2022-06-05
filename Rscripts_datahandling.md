@@ -12,4 +12,5 @@
 > head(ToothGrowth[1:10, 1:3])
 > head(ToothGrowth[1:4, 1:2])
 ```
-![dataset2 img]()
+![dataset2 img](https://github.com/akanksharawat07/Bioinfo_Rscripts/blob/main/dataset2.png)
+
