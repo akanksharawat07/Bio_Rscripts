@@ -1,0 +1,123 @@
+getwd()
+setwd("~/Desktop/TCGAbiolinks")
+# load("~/Desktop/TCGAbiolinks/tcgabrca_biolinks.RData")
+# load("~/Desktop/TCGAbiolinks/tcgabrca_biolinks.Rhistory")
+library(tidyverse)
+library(data.table)
+library(tibble)
+library(readxl)
+library(writexl)
+library(tidyr)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+library(lattice)
+library(purrr)
+library(gridExtra)
+library(dplyr, tibble, readr)
+library(ggpubr)
+#install.packages("xlsx")
+library(xlsx)
+library(ggplot2)
+library(pheatmap)
+listw=fread('TITLEgene',header=F)
+listw=head(listw,12)
+listheatmap <- list()
+listw
+for(i in 1:nrow(listw)){
+  print(i)#1
+  genetype = listw$V1[i] #genetype should be the name to which a set of genes belong
+  print(genetype)#2
+  geneslist_allsheets <- read.xlsx("/home/digemed/Desktop/TCGAbiolinks/cleargene.xlsx", sheetIndex = i, header = F)
+  a <- dim(geneslist_allsheets)[1] #this will give the total number of genes we considering after deleting those who were missing in original list (NA type)
+  print(a <- dim(geneslist_allsheets)[1]) #3
+  sub.exp.brca1 <- fpkm_counts_1[c(geneslist_allsheets$X1[]),]  #the subset of count values based on genes of interest remove the genes 
+  sub.exp.brca1.t <- as.data.frame(t(sub.exp.brca1))
+  TCGAmerge1 <- merge(TCGA_group1ID, sub.exp.brca1.t, by = 'row.names', all = TRUE)
+  TCGAmerge2 <- merge(TCGA_group2ID, sub.exp.brca1.t, by = 'row.names', all = TRUE)
+  TCGAmerge1_f <- TCGAmerge1 %>% drop_na(TLratio)
+  TCGAmerge2_f <- TCGAmerge2 %>% drop_na(TLratio)
+  TCGAmerge1_f$TLClass <- "A"
+  dim(TCGAmerge1_f) #588  51
+  TCGAmerge2_f$TLClass <- "B"
+  dim(TCGAmerge2_f) #279  51#
+  fin_TCGAconcat <- bind_rows(TCGAmerge1_f, TCGAmerge2_f)
+  #cleaning gene names by creating a function cleanfin_TCGAconcat such that anything after a pipe gets removed
+  cleanfin_TGCAconcat <- function(x){ colnames(x) <- gsub("\\|.*", "", colnames(x)); x} #function created here will remove the pattern mentioned in gsub function with nothing
+  fin_TCGAconcat <- cleanfin_TGCAconcat(fin_TCGAconcat)
+  dim(fin_TCGAconcat) #867  51
+  #a will have the no. of columns as a value which we will use to subset the count data
+  a <- dim(fin_TCGAconcat)[2]
+  count.brca <- fin_TCGAconcat[,c(1,4:a)] 
+  dim(count.brca) #867 samples 48 (1row.name + 47genes)
+  options(scipen = 999)
+  count_brca <- tibble::column_to_rownames(count.brca, "Row.names")
+  dim(count_brca) #867  47 gene of interest
+  b <- dim(count_brca)[2]
+  c <- b-1 #47
+  #2. calculating wilcoxon pvalues for these raw counts
+  wlp=list()
+  for(j in 1:c){
+    wl<- wilcox.test(count_brca[,j]~ TLClass, data = count_brca, paired = FALSE) #paired = FALSE
+    wlp=c(wlp,wl$p.value) 
+  }
+  wlp
+  colist <- list(colnames(count_brca[,1:c])) 
+  dfcolist <- data.frame(matrix(unlist(colist), nrow=c, byrow=TRUE),stringsAsFactors=FALSE) #nrow is the no. of genes of interest/genelist
+  dfwlp <- data.frame(matrix(unlist(wlp), nrow=c, byrow=TRUE),stringsAsFactors=FALSE)
+  
+  #brca_test has two cols now one with genes and other with w_pval
+  brca_test <- cbind(dfcolist, dfwlp)
+  head(brca_test)
+  names(brca_test)[1] <- 'Gene'
+  names(brca_test)[2] <- 'W_pval'
+  library(tibble)
+  
+  brca_test <- tibble::column_to_rownames(brca_test, "Gene")
+  brca_test$adj_pval <- p.adjust(brca_test[,1], method="BH") #WITH TWO COL PVAL AND LOG PVAL
+  
+  brca_test.t <- as.data.frame(t(brca_test))
+  brca_test.t # has pval and adjpval
+  
+  #3. calculating median for the two groups(A AND B) 
+  meddf<- aggregate(.~TLClass, count_brca, median, na.rm = TRUE) 
+  count_brca.med <- meddf
+  count_brca.med <- tibble::column_to_rownames(count_brca.med, "TLClass")
+  
+  ### merging two df one with significance vals and other with median 
+  fourcol.df <- bind_rows(brca_test.t, count_brca.med)
+  #taking gene names in another df
+  four.rownames <- as.data.frame(rownames(t(fourcol.df)))
+  names(four.rownames)[1] <- 'Gene' 
+  ## transpose the matrix for replacing values in one column based on values in another column
+  fourcol.df.t <- as.data.frame(t(fourcol.df))
+  head(fourcol.df.t)
+  subdf.four <- fourcol.df.t
+  # subdf.four <- subdf.four %>% rowwise() %>% mutate(abc = ifelse(W_pval < 0.05 && B>A, 0.005,0.05))
+  subdf.four <- subdf.four %>% rowwise() %>% mutate(abc = ifelse(W_pval < 0.05 && B>A, 0.005,W_pval)) #red B>A median of group B counts is greater than median of group A counts
+  subdf.four <- subdf.four %>% rowwise() %>% mutate(abc = ifelse(W_pval < 0.05 && B<A, 0.05,abc))
+  as.data.frame(subdf.four)
+  #merging the two dataframe for heatmap plotting 
+  hm.df <- as.data.frame(c(four.rownames,subdf.four))
+  hm.df <- tibble::column_to_rownames(hm.df, "Gene")
+  names(hm.df)[5] <- 'W_pval.median'
+  hm.df <- hm.df %>% arrange(W_pval.median)
+  hm.df.t <- as.data.frame(t(hm.df))
+  
+  #4. heatmap
+  # png(file = paste(genetype, "3colors.png", sep="_"), width = 2000, height = 800)
+  brca_heatmap <- pheatmap(hm.df.t[c(2,5),], cluster_cols = F, cluster_rows = F, cellwidth = 30, cellheight = 15, legend = FALSE, color = c("red","blue","gray"), breaks = c(0,0.005,0.05,1), main = paste("Significance (pval & padj(BH)) trends across",genetype, "related genes"))
+  brca_heatmap
+  listheatmap[[i]] <- brca_heatmap[[4]] #to save each plot into a list. note the [[4]] https://www.biostars.org/p/128229/
+  dev.off()
+  
+}
+print(i)
+
+#for plotting multiple heatmaps in one sheet at the end of loop run this
+# png(file = "gridarranged_brcarawcount12final.png", width = 2500, height = 1500)
+# pdf(file = "gridarranged_brcarawcount12final.pdf", width = 35, height = 25)
+pdf(file = "gridarranged_brca_FPKM.pdf", width = 35, height = 25)
+grid.arrange(arrangeGrob(grobs = listheatmap, nrow = 12)) #nrow=12 since 12 heatmaps to plotted in one sheet 
+# ggsave(file = "grid_arrange.pdf", g)
+dev.off()
