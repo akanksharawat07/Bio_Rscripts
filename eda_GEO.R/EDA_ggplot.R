@@ -22,4 +22,3 @@ ggplot(data = Plantdf, aes(x = sepal_length, y = sepal_width)) +
 # You can also use the color aesthetic to differentiate between different categories or groups within a feature. For example, to color the points according to the species, you could do the following:
 ggplot(data = Plantdf, aes(x = sepal_length, y = sepal_width, color = species)) +
   geom_point()
-
